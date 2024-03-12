@@ -2,6 +2,23 @@ import torch
 import torch.nn as nn
 import math
 
+class LayerNormalization(nn.Module):
+
+    def __init__(self, features: int, eps:float=10**-6) -> None:
+        super().__init__()
+        self.eps = eps
+        self.alpha = nn.Parameter(torch.ones(features)) # alpha is a learnable parameter
+        self.bias = nn.Parameter(torch.zeros(features)) # bias is a learnable parameter
+
+    def forward(self, x):
+        # x: (batch, seq_len, hidden_size)
+         # Keep the dimension for broadcasting
+        mean = x.mean(dim = -1, keepdim = True) # (batch, seq_len, 1)
+        # Keep the dimension for broadcasting
+        std = x.std(dim = -1, keepdim = True) # (batch, seq_len, 1)
+        # eps is to prevent dividing by zero or when std is very small
+        return self.alpha * (x - mean) / (std + self.eps) + self.bias
+
 
 class InputEmbeddings(nn.Module):
     def __init__(self, d_model: int, vocab_size: int):
@@ -44,10 +61,10 @@ class MultiHeadAttentionBlock(nn.Module):
         super(MultiHeadAttentionBlock, self).__init__()
         
         self.d_model = d_model
-        self.w_q = nn.Linear(d_model,d_model,bias=False)
-        self.w_k = nn.Linear(d_model,d_model,bias=False)
-        self.w_v = nn.Linear(d_model, d_model,bias=False)
-        self.w_o = nn.Linear(d_model, d_model,bias=False)
+        self.w_q = nn.Linear(d_model,d_model)
+        self.w_k = nn.Linear(d_model,d_model)
+        self.w_v = nn.Linear(d_model, d_model)
+        self.w_o = nn.Linear(d_model, d_model)
         
         self.dropout = nn.Dropout(dropout)
         self.head_dim = d_model // h
@@ -105,7 +122,7 @@ class Residual_connection(nn.Module):
     def __init__(self, d_model: int, dropout: float, eps:float) -> None:
         super(Residual_connection, self).__init__()
         self.dropout = nn.Dropout(dropout)
-        self.norm = nn.LayerNorm(d_model, eps=eps)
+        self.norm = LayerNormalization(d_model)
 
     def forward(self, x, sublayer):
         #identity x and output y
@@ -126,7 +143,7 @@ class Encoder_block(nn.Module):
 class Encoder(nn.Module):
     def __init__(self, N: int, h: int, d_model: int, hidden_dim: int, dropout: float, eps: float):
         super(Encoder, self).__init__()
-        self.layer_norm = nn.LayerNorm(d_model, eps=eps)
+        self.layer_norm = LayerNormalization(d_model)
         self.encoder_blocks = nn.ModuleList([Encoder_block(h, d_model, hidden_dim, dropout, eps) for _ in range(N)])
         
     def forward(self,x,mask):
@@ -153,7 +170,7 @@ class Decoder(nn.Module):
     def __init__(self, N:int, d_model:int, h:int, dropout:float, hidden_dim:int, eps:float):
         super().__init__()
         self.decoder_blocks = nn.ModuleList([decoder_blocks(d_model, h, dropout, hidden_dim, eps) for _ in range(N)])
-        self.norm =  nn.LayerNorm(d_model, eps=eps)
+        self.norm =  LayerNormalization(d_model)
 
     def forward(self,x,encode_out,src_mask, tgt_mask):
         for layer in self.decoder_blocks:
@@ -165,10 +182,9 @@ class ProjectionLayer(nn.Module):
     def __init__(self, d_model:int, vocab_size:int):
         super().__init__()
         self.net = nn.Linear(d_model, vocab_size)
-        self.ac = nn.Softmax(dim=-1)
 
     def forward(self,x):
-        return self.ac(self.net(x))
+        return self.net(x)
 
 
 

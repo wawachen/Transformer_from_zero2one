@@ -13,22 +13,22 @@ import os
 from transformers import AdamW, get_scheduler
 import torch.nn as nn
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 bleu = BLEU()
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f'using {device}')
 
-max_dataset_size = 120000
-train_size = 119990
+max_dataset_size = 2000000
+train_size = 1999990
 valid_size = 10
 
-path = "/home/wawa/pytorch-transformer/my_reproduce/translation2019zh/translation2019zh_train.json"
+path = "./translation2019zh/translation2019zh_train.json"
 data = C2E_translate(path,limit_num=max_dataset_size)
 train_data, valid_data = random_split(data,[train_size,valid_size])
 
-path1 = "/home/wawa/pytorch-transformer/my_reproduce/translation2019zh/translation2019zh_valid.json"
+path1 = "./translation2019zh/translation2019zh_valid.json"
 test_data = C2E_translate(path1)
 
 model_check_point = "Helsinki-NLP/opus-mt-zh-en"
@@ -51,9 +51,10 @@ tokenizer = AutoTokenizer.from_pretrained(model_check_point)
 #four sentences
 max_input_len = 128
 max_target_len = 128
+bos_id = 65000
 
-batch_size = 16
-learning_rate = 3e-4
+batch_size = 64
+learning_rate = 1e-4
 epoch_num = 60
 
 # inputs = [train_data[i]['chinese'] for i in range(5)]
@@ -100,7 +101,6 @@ epoch_num = 60
 #     return store_arr
 
 def beam_search(model, source, source_mask, ori_source_mask, max_length, beam_size):
-    bos_id = 65000
     eos_id = tokenizer.eos_token_id 
 
     encoder_output = model.encode(source, source_mask)
@@ -136,7 +136,6 @@ def beam_search(model, source, source_mask, ori_source_mask, max_length, beam_si
     return candidates[0][0]
             
 def greedy_decode(model, source, source_mask, ori_source_mask, max_length):
-    bos_id = 65000
     eos_id = tokenizer.eos_token_id 
 
     encoder_output = model.encode(source, source_mask)
@@ -181,8 +180,8 @@ def test_loop(dataloader, model):
             assert batch_encoder_input.shape[0] == 1
 
             #[batch,max_seq]
-            # pred_tokens = greedy_decode(model, batch_encoder_input, batch_encoder_mask, batch_ori_encoder_mask, max_target_len)
-            pred_tokens = beam_search(model, batch_encoder_input, batch_encoder_mask, batch_ori_encoder_mask, max_target_len, 4)
+            pred_tokens = greedy_decode(model, batch_encoder_input, batch_encoder_mask, batch_ori_encoder_mask, max_target_len)
+            # pred_tokens = beam_search(model, batch_encoder_input, batch_encoder_mask, batch_ori_encoder_mask, max_target_len, 4)
 
             pred_tokens_list = [pred_tokens[i,:].cpu().numpy() for i in range(pred_tokens.shape[0])]
 
@@ -253,7 +252,10 @@ def train_loop(dataloader, dataloader1, model,optimizer, epochs, logger, path):
 
 # print(labels)
 def shift_right(labels):
-    return torch.cat([torch.ones(labels.shape[0],1,dtype=torch.int)*65000,labels[:,:-1]],dim=-1)
+    return torch.cat([torch.ones(labels.shape[0],1,dtype=torch.int)*bos_id,labels[:,:-1]],dim=-1)
+
+def shift_right_mask(masks):
+    return torch.cat([torch.ones(masks.shape[0],1,dtype=torch.int), masks[:,:-1]], dim=-1)
 
 ##################################################
 def generate_mask(q_mask, k_mask, if_decoder = False):
@@ -299,6 +301,7 @@ def token_fn(samples):
         batch_data_t = tokenizer(batch_targets,padding=True,max_length=max_target_len, truncation=True, return_tensors="pt")
         labels = batch_data_t['input_ids']
         decoder_mask = batch_data_t['attention_mask']
+        decoder_mask = shift_right_mask(decoder_mask)
         # batch_data['target_attention_mask'] = batch_data_t['attention_mask'].unsqueeze(1).unsqueeze(1)
 
     batch_data['decoder_input_ids'] = shift_right(labels)
@@ -317,12 +320,32 @@ def token_fn(samples):
 
 train_dataloader = DataLoader(train_data,batch_size = batch_size, shuffle=True, collate_fn=token_fn)
 valid_dataloader = DataLoader(valid_data, batch_size = 1, shuffle=True, collate_fn=token_fn)
-test_dataloader = DataLoader(test_data,batch_size=2, shuffle=False,collate_fn=token_fn)
+test_dataloader = DataLoader(test_data,batch_size= 2, shuffle=False,collate_fn=token_fn)
 
-# batch = next(iter(test_dataloader))
+def translate(model, sentence):
+    model_weights = torch.load("./record/model_weights.pt")
+    model.load_state_dict(model_weights['model_params'])
 
-# torch.set_printoptions(profile="full")
-# np.set_printoptions(threshold=np.inf)
+    model.eval() 
+
+    batch_data = tokenizer(sentence, padding=True, max_length=max_input_len, truncation=True, return_tensors="pt")
+    source = batch_data['input_ids'].to(device)
+
+    # print(list(tokenizer.convert_ids_to_tokens(source.cpu().numpy())[0]))
+    
+    
+    ori_source_mask = batch_data['attention_mask'].to(device)
+    source_mask = generate_mask(ori_source_mask,ori_source_mask)
+
+    pred_tokens = greedy_decode(model, source, source_mask, ori_source_mask, max_target_len)
+    pred_tokens_list = [pred_tokens[i,:].cpu().numpy() for i in range(pred_tokens.shape[0])]
+    pred_sens = tokenizer.batch_decode(pred_tokens_list, skip_special_tokens=True)
+
+    print(pred_sens[0].strip())
+# batch = next(iter(valid_dataloader))
+
+# # torch.set_printoptions(profile="full")
+# # np.set_printoptions(threshold=np.inf)
 
 # print('batch_shape: ', {k:v.shape for k,v in batch.items()})
 # print(batch)
@@ -334,10 +357,12 @@ seq_len_decoder = max_target_len
 vocab_size_encoder = tokenizer.vocab_size
 vocab_size_decoder = tokenizer.vocab_size
 
+# print(vocab_size_encoder)
+
 model = build_transformer(d_model, seq_len_encoder, seq_len_decoder, vocab_size_encoder, vocab_size_decoder)
 model.to(device)
 
-path_log = os.path.join("/home/wawa/pytorch-transformer/my_reproduce", strftime("%Y-%m-%d--%H:%M:%S", localtime()))
+path_log = os.path.join("./record", strftime("%Y-%m-%d--%H:%M:%S", localtime()))
 path_model = path_log+"/model/"
 
 if not os.path.exists(path_log):
@@ -349,8 +374,13 @@ logger = SummaryWriter(path_log)
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, eps=1e-9)
 # lr_scheduler = get_scheduler("linear",optimizer=optimizer,num_warmup_steps=0, num_training_steps=len(train_dataloader)*epoch_num)
 
-test_loop(valid_dataloader, model)
-# train_loop(train_dataloader,valid_dataloader, model, optimizer, epoch_num, logger, path_model)
+# test_loop(valid_dataloader, model)
+# train_loop(train_dataloader, valid_dataloader, model, optimizer, epoch_num, logger, path_model)
+
+sentence = "我们要保护环境为了下一代人在地球生存。"
+translate(model, sentence)
+
+
 # batch = next(iter(test_dataloader))
 # batch_data = batch.to(device)
 # batch_encoder_input = batch_data['input_ids']
@@ -370,6 +400,8 @@ test_loop(valid_dataloader, model)
 # print(pred_sens)
 
 logger.close()
+# os.system("/usr/bin/shutdown")
+
 
 
 

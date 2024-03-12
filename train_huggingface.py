@@ -106,7 +106,7 @@ def train_loop(dataloader,model,optimizer, lr_scheduler, epochs, logger, path):
 
 
 # print(labels)
-def shift_right(labels):
+def shift_left(labels):
     return torch.cat([torch.ones(labels.shape[0],1,dtype=torch.int)*65000,labels[:,:-1]],dim=-1)
 
 # manually process the batch data
@@ -121,7 +121,7 @@ def token_fn(samples):
         batch_data_t = tokenizer(batch_targets,padding=True,max_length=max_target_len, truncation=True, return_tensors="pt")
         labels = batch_data_t['input_ids']
 
-    batch_data['decoder_input_ids'] = shift_right(labels)
+    batch_data['decoder_input_ids'] = shift_left(labels)
     end_token_index = torch.where(labels==tokenizer.eos_token_id)[1] 
     for i,index in enumerate(end_token_index):
         labels[i, index+1:] = -100
