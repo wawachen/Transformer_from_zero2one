@@ -350,57 +350,59 @@ def translate(model, sentence):
 # print('batch_shape: ', {k:v.shape for k,v in batch.items()})
 # print(batch)
 
-#Configurations of transformer
-d_model = 512
-seq_len_encoder = max_input_len
-seq_len_decoder = max_target_len
-vocab_size_encoder = tokenizer.vocab_size
-vocab_size_decoder = tokenizer.vocab_size
+if __name__ == "__main__":
+    train_flag = 1
+    #Configurations of transformer
+    d_model = 512
+    seq_len_encoder = max_input_len
+    seq_len_decoder = max_target_len
+    vocab_size_encoder = tokenizer.vocab_size
+    vocab_size_decoder = tokenizer.vocab_size
 
-# print(vocab_size_encoder)
+    # print(vocab_size_encoder)
 
-model = build_transformer(d_model, seq_len_encoder, seq_len_decoder, vocab_size_encoder, vocab_size_decoder)
-model.to(device)
+    model = build_transformer(d_model, seq_len_encoder, seq_len_decoder, vocab_size_encoder, vocab_size_decoder)
+    model.to(device)
 
-path_log = os.path.join("./record", strftime("%Y-%m-%d--%H:%M:%S", localtime()))
-path_model = path_log+"/model/"
+    path_log = os.path.join("./record", strftime("%Y-%m-%d--%H:%M:%S", localtime()))
+    path_model = path_log+"/model/"
 
-if not os.path.exists(path_log):
-    os.makedirs(path_log)
+    if not os.path.exists(path_log):
+        os.makedirs(path_log)
 
-logger = SummaryWriter(path_log)
+    logger = SummaryWriter(path_log)
 
-# optimizer = AdamW(model.parameters(),lr=learning_rate)
-optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, eps=1e-9)
-# lr_scheduler = get_scheduler("linear",optimizer=optimizer,num_warmup_steps=0, num_training_steps=len(train_dataloader)*epoch_num)
+    # optimizer = AdamW(model.parameters(),lr=learning_rate)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, eps=1e-9)
+    # lr_scheduler = get_scheduler("linear",optimizer=optimizer,num_warmup_steps=0, num_training_steps=len(train_dataloader)*epoch_num)
 
-# test_loop(valid_dataloader, model)
-# train_loop(train_dataloader, valid_dataloader, model, optimizer, epoch_num, logger, path_model)
+    # test_loop(valid_dataloader, model)
+    if train_flag:
+        train_loop(train_dataloader, valid_dataloader, model, optimizer, epoch_num, logger, path_model)
+    else:
+        sentence = "我们要保护环境为了下一代人在地球生存。"
+        translate(model, sentence)
 
-sentence = "我们要保护环境为了下一代人在地球生存。"
-translate(model, sentence)
+    # batch = next(iter(test_dataloader))
+    # batch_data = batch.to(device)
+    # batch_encoder_input = batch_data['input_ids']
+    # batch_encoder_mask = batch_data['attention_mask']
+    # batch_labels = batch_data['labels'].cpu().numpy() # [batch,seq]
+    # pred_tokens = greedy_decode(model, batch_encoder_input, batch_encoder_mask, max_target_len)
 
+    # pred_tokens_list = [pred_tokens[i,:] for i in range(pred_tokens.shape[0])]
+    # with tokenizer.as_target_tokenizer():
+    #     pred_sens = tokenizer.batch_decode(pred_tokens_list, skip_special_tokens=True)
 
-# batch = next(iter(test_dataloader))
-# batch_data = batch.to(device)
-# batch_encoder_input = batch_data['input_ids']
-# batch_encoder_mask = batch_data['attention_mask']
-# batch_labels = batch_data['labels'].cpu().numpy() # [batch,seq]
-# pred_tokens = greedy_decode(model, batch_encoder_input, batch_encoder_mask, max_target_len)
+    # labels_tokens = np.where(batch_labels!=-100, batch_labels, tokenizer.pad_token_id)
+    # labels_tokens_list = [labels_tokens[i,:] for i in range(labels_tokens.shape[0])]
+    # label_sens = tokenizer.batch_decode(labels_tokens_list, skip_special_tokens=True)
 
-# pred_tokens_list = [pred_tokens[i,:] for i in range(pred_tokens.shape[0])]
-# with tokenizer.as_target_tokenizer():
-#     pred_sens = tokenizer.batch_decode(pred_tokens_list, skip_special_tokens=True)
+    # print(label_sens)
+    # print(pred_sens)
 
-# labels_tokens = np.where(batch_labels!=-100, batch_labels, tokenizer.pad_token_id)
-# labels_tokens_list = [labels_tokens[i,:] for i in range(labels_tokens.shape[0])]
-# label_sens = tokenizer.batch_decode(labels_tokens_list, skip_special_tokens=True)
-
-# print(label_sens)
-# print(pred_sens)
-
-logger.close()
-# os.system("/usr/bin/shutdown")
+    logger.close()
+    # os.system("/usr/bin/shutdown")
 
 
 

@@ -11,12 +11,15 @@ The dataset of *Helsinki-NLP* and *translation2019zh* is shared in the alipan. T
 
 ## Usage
 Finetune huggingface model <br>
-'python train_huggingface.py'
+> python train_huggingface.py
 
 Test huggingface model <br>
-'python test_huggingface.py'
+> python test_huggingface.py
 
 Train from scratch <br>
-'python train.py' <br>
-We provide a trained model for you to test the performance. Download the model_weights.pt from the provided link, then create a folder in root folder called record.<br>
-Finally, put the model_weights.pt into the record folder. Comment the train_loop() function, and uncomment the translate() function.
+> python train.py <br>
+
+We provide a trained model for you to test the performance of our scratched model. Download the model_weights.pt from the provided link, then create a folder in root folder called *record*.<br>
+Finally, put the *model_weights.pt* into the *record* folder. 
+
+To train the model, set **train_flag = 1**. To test the model, set set **train_flag = 0**
